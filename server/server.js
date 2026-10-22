@@ -1,12 +1,20 @@
 const express = require('express');
 const http = require('http');
+const path = require('path');
+const fs = require('fs');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
+const CLIENT_DIST = path.join(__dirname, '..', 'client', 'dist');
+
 app.use(cors());
 app.use(express.json());
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() });
+});
 
 const io = new Server(server, {
   cors: {
@@ -249,8 +257,25 @@ io.on('connection', (socket) => {
 
 // API: Get rooms list (for debugging)
 app.get('/api/rooms', (req, res) => {
-  res.json({ rooms: Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, { ...v, players: v.players.map(p => ({ id: p.id, name: p.name, ready: p.ready })) }]) });
+  const safeRooms = Object.fromEntries(
+    Object.entries(rooms).map(([k, v]) => [
+      k,
+      { ...v, players: v.players.map(p => ({ id: p.id, name: p.name, ready: p.ready })) },
+    ])
+  );
+  res.json({ rooms: safeRooms });
 });
+
+// Serve the built React client (single-service deployment)
+if (fs.existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(CLIENT_DIST, 'index.html'));
+  });
+} else {
+  console.warn('client/dist not found - run `npm run build` first');
+}
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

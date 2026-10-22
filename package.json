@@ -1,0 +1,16 @@
+{
+  "name": "type-racer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multiplayer typing race game",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "build": "npm run install:all && npm --prefix client run build",
+    "start": "node server/server.js",
+    "dev:server": "npm --prefix server run start",
+    "dev:client": "npm --prefix client run dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
