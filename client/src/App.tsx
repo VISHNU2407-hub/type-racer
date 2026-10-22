@@ -3,7 +3,7 @@ import React from 'react';
 import { io, Socket } from 'socket.io-client';
 import './index.css';
 
-const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
 // Error types
 const ERRORS = {

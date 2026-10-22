@@ -1,0 +1,24 @@
+services:
+  # Backend service (Socket.io + Express)
+  - type: web
+    name: type-racer-server
+    env: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3001
+
+  # Frontend service (Vite + React)
+  - type: web
+    name: type-racer-client
+    env: node
+    rootDir: client
+    buildCommand: npm install && npm run build
+    startCommand: npm run preview
+    envVars:
+      - key: VITE_SOCKET_URL
+        fromService:
+          name: type-racer-server
+          property: url
