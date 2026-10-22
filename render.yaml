@@ -19,7 +19,4 @@ services:
     startCommand: npm run preview
     envVars:
       - key: VITE_SOCKET_URL
-        fromService:
-          type: web
-          name: type-racer-server
-          property: url
+        sync: false
