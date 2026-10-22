@@ -5,6 +5,25 @@ import './index.css';
 
 const SOCKET_URL = 'http://localhost:3001';
 
+// Error types
+const ERRORS = {
+  INVALID_ROOM: 'Invalid room code',
+  ROOM_FULL: 'Room is full (max 8 players)',
+  ROOM_IN_GAME: 'Cannot join - game is already in progress',
+  PLAYER_LEFT: 'Player left the room',
+  DISCONNECTED: 'Disconnected from server',
+};
+
+// Show error message temporarily
+const [errorMessage, setErrorMessage] = React.useState('');
+const [errorTimeout, setErrorTimeout] = React.useState<number | null>(null);
+
+const clearError = React.useCallback(() => {
+  setErrorMessage('');
+  if (errorTimeout) clearTimeout(errorTimeout);
+  setErrorTimeout(null);
+}, []);
+
 const PAGE_HOME = 'home';
 const PAGE_LOBBY = 'lobby';
 const PAGE_GAME = 'game';
@@ -20,101 +39,6 @@ const CATEGORY_GENERAL = 'general';
 
 const WORD_COUNT_OPTIONS = [25, 50, 100];
 const TIME_MODE_OPTIONS = [15, 30, 60, 120];
-
-// Sound effects using Web Audio API
-const sounds = {
-  countdown: null,
-  go: null,
-  finish: null,
-  type: null,
-};
-
-function initAudioContext() {
-  if (!sounds.countdown) {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioContext();
-    
-    // Countdown beep (3 tones)
-    sounds.countdown = [];
-    for (let i = 0; i < 3; i++) {
-      sounds.countdown[i] = ctx.createOscillator();
-      sounds.countdown[i].frequency.value = 440 + i * 100;
-      sounds.countdown[i].duration = 0.3;
-      sounds.countdown[i].connect(ctx.destination);
-      sounds.countdown[i].start();
-    }
-    
-    // GO! fanfare
-    sounds.go = ctx.createOscillator();
-    sounds.go.frequency.value = 523;
-    sounds.go.type = 'sine';
-    sounds.go.duration = 0.5;
-    sounds.go.envelope = { attack: 0.01, decay: 0.2 };
-    sounds.go.connect(ctx.destination);
-    sounds.go.start();
-    
-    // Finish fanfare
-    sounds.finish = ctx.createOscillator();
-    sounds.finish.frequency.value = 659;
-    sounds.finish.type = 'sine';
-    sounds.finish.duration = 1.0;
-    sounds.finish.envelope = { attack: 0.01, decay: 0.5 };
-    sounds.finish.connect(ctx.destination);
-    sounds.finish.start();
-    
-    // Typewriter click
-    sounds.type = ctx.createOscillator();
-    sounds.type.frequency.value = 800;
-    sounds.type.type = 'square';
-    sounds.type.duration = 0.1;
-    sounds.type.connect(ctx.destination);
-  }
-}
-
-function playSound(name) {
-  if (!sounds[name]) return;
-  // Reset oscillator for replay
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) return;
-  const ctx = new AudioContext();
-  
-  if (name === 'countdown') {
-    for (let i = 0; i < 3; i++) {
-      const osc = ctx.createOscillator();
-      osc.frequency.value = 440 + i * 100;
-      osc.duration = 0.3;
-      osc.connect(ctx.destination);
-      osc.start();
-      setTimeout(() => osc.stop(), 300);
-    }
-  } else if (name === 'go') {
-    const osc = ctx.createOscillator();
-    osc.frequency.value = 523;
-    osc.type = 'sine';
-    osc.duration = 0.5;
-    osc.envelope = { attack: 0.01, decay: 0.2 };
-    osc.connect(ctx.destination);
-    osc.start();
-    setTimeout(() => osc.stop(), 500);
-  } else if (name === 'finish') {
-    const osc = ctx.createOscillator();
-    osc.frequency.value = 659;
-    osc.type = 'sine';
-    osc.duration = 1.0;
-    osc.envelope = { attack: 0.01, decay: 0.5 };
-    osc.connect(ctx.destination);
-    osc.start();
-    setTimeout(() => osc.stop(), 1000);
-  } else if (name === 'type') {
-    const osc = ctx.createOscillator();
-    osc.frequency.value = 800;
-    osc.type = 'square';
-    osc.duration = 0.1;
-    osc.connect(ctx.destination);
-    osc.start();
-    setTimeout(() => osc.stop(), 100);
-  }
-}
 
 export default function App() {
   const [page, setPage] = React.useState(PAGE_HOME);
@@ -158,6 +82,13 @@ export default function App() {
   let socket: Socket | null = null;
   let reconnectInterval: NodeJS.Timeout | null = null;
 
+  // Helper: sanitize HTML for player names
+  function sanitizeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   // Helper: generate room code
   const generateRoomCode = React.useCallback(() => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -200,7 +131,35 @@ export default function App() {
 
   // Initialize audio when component mounts
   React.useEffect(() => {
-    initAudioContext();
+    // Web Audio API setup for sound effects
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    
+    // Countdown beep (3 tones)
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      osc.frequency.value = 440 + i * 100;
+      osc.connect(ctx.destination);
+      osc.start();
+      setTimeout(() => osc.stop(), 300);
+    }
+    
+    // GO! fanfare
+    const goOsc = ctx.createOscillator();
+    goOsc.frequency.value = 523;
+    goOsc.type = 'sine';
+    goOsc.connect(ctx.destination);
+    goOsc.start();
+    setTimeout(() => goOsc.stop(), 500);
+    
+    // Finish fanfare
+    const finishOsc = ctx.createOscillator();
+    finishOsc.frequency.value = 659;
+    finishOsc.type = 'sine';
+    finishOsc.connect(ctx.destination);
+    finishOsc.start();
+    setTimeout(() => finishOsc.stop(), 1000);
   }, []);
 
   // Socket.io setup
@@ -208,12 +167,12 @@ export default function App() {
     if (!playerName) return;
     
     socket = io(SOCKET_URL, {
-      auth: { name: sanitizeHtml(playerName) },  // Sanitize name
+      auth: { name: sanitizeHtml(playerName) },
     });
 
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
-      clearInterval(reconnectInterval!);
+      clearInterval(reconnectInterval);
       setMessage('');
     });
 
@@ -222,7 +181,7 @@ export default function App() {
       setMessage('Disconnected. Reconnecting...');
       reconnectInterval = setInterval(() => {
         if (socket?.connect()) {
-          clearInterval(reconnectInterval!);
+          clearInterval(reconnectInterval);
           setMessage('');
           socket.emit('join_room', { name: playerName, roomCode });
         }
@@ -233,7 +192,6 @@ export default function App() {
     socket.on('room_created', (data) => {
       setRoomCode(data.roomCode);
       setPage(PAGE_LOBBY);
-      playSound('countdown');
     });
 
     socket.on('room_joined', (data) => {
@@ -255,7 +213,6 @@ export default function App() {
       setGameStarted(false);
       setGameEnded(false);
       setLeaderboard([]);
-      playSound('countdown');
       
       // Start countdown
       const timer = setInterval(() => {
@@ -264,7 +221,6 @@ export default function App() {
             clearInterval(timer);
             setIsCountdownActive(false);
             setGameStarted(true);
-            playSound('go');
             return null;
           }
           return prev - 1;
@@ -307,7 +263,6 @@ export default function App() {
           accuracy: p.accuracy,
           timeTaken: Math.floor((p.finishedAt - p.joinedAt) / 1000),
         })));
-      playSound('finish');
     });
 
     socket.on('game_over', (data) => {
@@ -318,16 +273,9 @@ export default function App() {
 
     return () => {
       socket?.disconnect();
-      clearInterval(reconnectInterval!);
+      clearInterval(reconnectInterval);
     };
   }, [playerName]);
-
-  // Sanitize HTML for player names
-  function sanitizeHtml(text: string) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
 
   // Handle name input
   const handleNameChange = React.useCallback((e) => {
@@ -472,6 +420,18 @@ export default function App() {
       const timer = setTimeout(() => {
         setIsCountdownActive(false);
         setGameStarted(true);
+        // Initialize audio context after user interaction
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          osc.frequency.value = 523;
+          osc.type = 'sine';
+          osc.connect(ctx.destination);
+          osc.start();
+          setTimeout(() => osc.stop(), 500);
+        }
+        setGameStarted(true);
         setStartTime(Date.now());
       }, 500);
     }
@@ -532,12 +492,13 @@ export default function App() {
             
             <div className="mb-6">
               <h3 className="text-sm font-medium text-muted mb-3">Players ({players.length}/8)</h3>
+              {errorMessage && <p className="text-red-600 text-sm mb-2">{errorMessage}</p>}
               {players.length === 0 ? (
                 <p className="text-muted">No players yet</p>
               ) : (
                 <div className="space-y-2">
                   {players.map((player) => (
-                    <div key={player.id} className={player.ready ? 'flex items-center justify-between p-3 rounded-lg bg-success/20' : 'flex items-center justify-between p-3 rounded-lg bg-gray-900'}>
+                    <div key={player.id} className={['flex items-center justify-between p-3 rounded-lg', player.ready ? 'bg-green-200/20' : 'bg-gray-900'].join(' ')}>
                       <span className="font-medium">{player.name}</span>
                       <span className="text-muted text-xs">{player.ready ? 'Ready' : 'Not Ready'}</span>
                     </div>
@@ -626,7 +587,7 @@ export default function App() {
             <div className="mb-6">
               <button
                 onClick={handleReadyToggle}
-                className={isReady ? 'w-full py-3 rounded-lg font-medium transition-colors bg-success text-bg' : 'w-full py-3 rounded-lg font-medium transition-colors bg-gray-700 text-gray-200 hover:bg-accent'}
+                className={['w-full py-3 rounded-lg font-medium transition-colors', isReady ? 'bg-green-200 text-green-800' : 'bg-gray-700 text-gray-200 hover:bg-accent'].join(' ')}
               >
                 {isReady ? 'Mark as Not Ready' : 'Mark as Ready'}
               </button>
@@ -664,7 +625,7 @@ export default function App() {
           {gameStarted && !gameEnded && (
             <div className="bg-card rounded-xl p-6 shadow-xl mb-8">
               <div className="relative">
-                <div className="h-48 bg-gray-900 rounded-lg p-4 mb-6 overflow-y-auto">
+                <div className="sm:h-48 md:h-60 bg-gray-900 rounded-lg p-4 mb-6 overflow-y-auto">
                   <p className="text-muted text-base">
                     {currentText.split('').map((char, i) => {
                       const typed = typedText[i];
@@ -677,7 +638,7 @@ export default function App() {
                         return (
                           <span
                             key={i}
-                            className={isCorrect ? 'relative inline-block bg-success/30 text-success' : 'relative inline-block bg-error/30 text-error'}
+                            className={isCorrect ? 'relative inline-block bg-green-200 text-green-800' : 'relative inline-block bg-red-200 text-red-800'}
                           >
                             {char}
                           </span>
@@ -685,15 +646,15 @@ export default function App() {
                       }
                       
                       if (isCorrect) {
-                        return <span key={i} className="bg-success/30 text-success inline-block">{char}</span>;
+                        return <span key={i} className="bg-green-200 text-green-800 inline-block">{char}</span>;
                       }
                       
-                      return <span key={i} className="bg-error/30 text-error inline-block">{char}</span>;
+                      return <span key={i} className="bg-red-200 text-red-800 inline-block">{char}</span>;
                     })}
                   </p>
                 </div>
                 
-                <div className="mt-8 space-y-3">
+                <div className="mt-6 space-y-2 sm:mt-8 md:mt-10">
                   {players.map((player) => {
                     const progressData = playerProgress[player.id] || { progress: 0, wpm: 0, accuracy: 0, finished: false };
                     const isMe = player.id === socket?.id;
@@ -704,7 +665,7 @@ export default function App() {
                           {player.name.charAt(0)}
                         </div>
                         
-                        <div className="flex-1 h-4 rounded-full bg-gray-700 overflow-hidden relative">
+                        <div className="flex-1 h-5 sm:h-6 md:h-7 rounded-full bg-gray-700 overflow-hidden relative">
                           <div
                             className={isMe ? 'absolute left-0 top-0 bottom-0 rounded-full bg-accent' : 'absolute left-0 top-0 bottom-0 rounded-full bg-gradient-to-r from-accent to-cyan'}
                             style={{width: progressData.progress + '%'}}
@@ -714,7 +675,7 @@ export default function App() {
                           <div className="absolute right-0 top-0 bottom-0 w-px bg-gray-700" />
                         </div>
                         
-                        <div className="w-20 text-xs font-medium flex flex-col space-y-1">
+                        <div className="w-24 sm:w-32 md:w-40 text-sm sm:text-base md:text-lg font-medium flex flex-col space-y-1">
                           <span>{progressData.wpm > 0 ? progressData.wpm + ' WPM' : '0 WPM'}</span>
                           <span>{progressData.accuracy > 0 ? progressData.accuracy + '%' : '0%' } Acc</span>
                         </div>
@@ -741,12 +702,11 @@ export default function App() {
                   value={typedText}
                   onChange={(e) => setTypedText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={gameEnded}
+                  disabled={!gameStarted || gameEnded}
                   autoComplete="off"
                   spellCheck="false"
-                  className="w-full bg-gray-900 rounded-lg p-4 text-2xl font-mono text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent transition-colors"
+                  className="w-full bg-gray-900 rounded-lg sm:p-6 md:p-8 text-3xl font-mono text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent transition-colors min-h-[60px]"
                   placeholder="Start typing..."
-                  disabled={!gameStarted || gameEnded}
                 />
               </div>
             </div>
@@ -772,10 +732,10 @@ export default function App() {
                     <h3 className="text-xl font-bold text-accent mb-3">Leaderboard</h3>
                     <div className="space-y-2">
                       {leaderboard.map((player) => (
-                        <div key={player.position} className={player.position === 1 ? 'flex items-center justify-between p-3 rounded-lg bg-success/20' : player.position === 2 ? 'flex items-center justify-between p-3 rounded-lg bg-error/20' : 'flex items-center justify-between p-3 rounded-lg bg-gray-900/20'}>
+                        <div key={player.position} className={['flex items-center justify-between p-3 rounded-lg', player.position === 1 ? 'bg-green-200/20' : player.position === 2 ? 'bg-red-200/20' : 'bg-gray-900/20'].join(' ')}>
                           <span className="font-medium text-sm">{player.name}</span>
                           <span className="font-medium text-sm">{player.position}.</span>
-                          <span className="text-success">WPM: {player.wpm}</span>
+                          <span className="text-green-600">WPM: {player.wpm}</span>
                           <span className="text-muted">Acc: {player.accuracy}%</span>
                         </div>
                       ))}
@@ -783,7 +743,7 @@ export default function App() {
                   </div>
                 )}
                 
-<div className="mt-6">
+                <div className="mt-6">
                   <button
                     onClick={() => setPage(PAGE_RESULTS)}
                     className="w-full bg-accent text-bg font-medium py-2 rounded-lg hover:bg-accent-hover transition-colors"
@@ -793,7 +753,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -822,7 +782,7 @@ export default function App() {
                   </thead>
                   <tbody>
                     {leaderboard.map((player) => (
-                      <tr key={player.position} className={player.position === 1 ? 'border-b border-gray-700 hover:bg-success/20' : player.position === 2 ? 'border-b border-gray-700 hover:bg-error/20' : 'border-b border-gray-700 hover:bg-gray-900/20'}>
+                      <tr key={player.position} className={['border-b border-gray-700 hover:bg-green-200/20', player.position === 2 ? 'hover:bg-red-200/20' : 'hover:bg-gray-900/20'].join(' ')}>
                         <td className="p-2 font-medium">{player.position}</td>
                         <td className="p-2 font-medium">{player.name}</td>
                         <td className="p-2">{player.wpm}</td>
@@ -844,7 +804,7 @@ export default function App() {
               </button>
               <button
                 onClick={() => setPage(PAGE_HOME)}
-                className="flex-1 py-3 rounded-lg font-medium transition-colors bg-error text-bg hover:bg-error-hover"
+                className="flex-1 py-3 rounded-lg font-medium transition-colors bg-red-600 text-bg hover:bg-red-700"
               >
                 Exit to Home
               </button>

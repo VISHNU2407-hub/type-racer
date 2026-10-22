@@ -137,6 +137,10 @@ io.on('connection', (socket) => {
       socket.emit('error', 'Room is full (max 8 players)');
       return;
     }
+    if (room.gameStatus !== 'lobby') {
+      socket.emit('error', 'Cannot join - game is already in progress');
+      return;
+    }
     socket.join(roomCode);
     socket.roomCode = roomCode;
     socket.playerName = name;
